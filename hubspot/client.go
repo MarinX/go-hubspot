@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sync"
 )
 
 type Client struct {
 	baseUrl string
 	apiKey  string
+	client  *http.Client
+	once    sync.Once
 }
 
 func NewClient(baseUrl, apiKey string) *Client {
@@ -18,6 +21,12 @@ func NewClient(baseUrl, apiKey string) *Client {
 		baseUrl: baseUrl,
 		apiKey:  apiKey,
 	}
+}
+
+// SetHTTPClient sets custom HTTP client
+// If none set, it will use http.DefaultClient
+func (c *Client) SetHTTPClient(client *http.Client) {
+	c.client = client
 }
 
 // Hubspot single send email API
@@ -139,7 +148,7 @@ type Response struct {
 }
 
 func (c *Client) doRequest(r request) (Response, error) {
-	client := &http.Client{}
+	client := c.getHTTPClient()
 
 	req, err := http.NewRequest(r.Method, r.URL, bytes.NewBuffer(r.Body))
 	if err != nil {
@@ -163,4 +172,13 @@ func (c *Client) doRequest(r request) (Response, error) {
 		return Response{}, fmt.Errorf("Error: %s details: %s\n", resp.Status, body)
 	}
 	return Response{Body: body, StatusCode: resp.StatusCode}, nil
+}
+
+func (c *Client) getHTTPClient() *http.Client {
+	c.once.Do(func() {
+		if c.client == nil {
+			c.client = http.DefaultClient
+		}
+	})
+	return c.client
 }
